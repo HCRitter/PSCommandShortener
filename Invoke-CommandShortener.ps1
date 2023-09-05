@@ -19,20 +19,20 @@
 .EXAMPLE
     Invoke-CommandShortener -InputScriptBlock {Foreach-Object -Process {"Blub"} 
     Get-ChildItem -Path C:\Temp -Hidden;Cls }
-    <# 
+    
         Output: 
         % -Process {"Blub"} 
         ls -Path C:\Temp -h;Cls
-    #>
+    
 
     # $shortenedScript will contain the modified script block with shortened command names and aliases.
 
 .EXAMPLE
     Invoke-CommandShortener -InputScriptBlock {Get-Process | Where-Object { $_.CPU -gt 50 }}
-    <# 
+    
         Output: 
         ps | ? { $_.CPU -gt 50 } 
-    #>
+    
 
     # $shortenedScript will contain the modified script block with shortened command names and aliases.
 .NOTES
@@ -51,7 +51,8 @@ function Invoke-CommandShortener {
     )
     
     # Split the input script block into individual lines, removing empty lines and delimiters
-    $scriptBlockText = $InputScriptBlock.ToString().Trim() -split "(?<=;|`n|\|)" | ForEach-Object { $_ -replace "[;`n|]" } | Where-Object { $_ -match '\S' }
+    $ScriptblockText = New-Object -TypeName "System.Collections.ArrayList"
+    $scriptBlockText.AddRange(@($InputScriptBlock.ToString().Trim() -split "(?<=;|`n|\|)" | ForEach-Object { $_ -replace "[;`n|]" } | Where-Object { $_ -match '\S' }))
     
     # Identify command delimiters in the input script block
     $commandDelimiters = $InputScriptBlock.ToString() | Select-String -Pattern "(\n|\||;)" -AllMatches | ForEach-Object { $_.Matches.Value }
@@ -80,9 +81,15 @@ function Invoke-CommandShortener {
             }
             Default {
                 # Find the shortest alias for the command if it's not an alias itself
-                $commandAlias = ((Get-Alias -Definition $commandElementListItem.Cmdlet).DisplayName.ForEach({
-                    $_.Split("-")[0]
-                })) | Sort-Object -Property Length | Select-Object -first 1
+                try {
+                    $commandAlias = ((Get-Alias -Definition $commandElementListItem.Cmdlet -ErrorAction Stop).DisplayName.ForEach({
+                        $_.Split("-")[0]
+                    })) | Sort-Object -Property Length | Select-Object -first 1
+                }
+                catch {
+                    $commandAlias = $null
+                }
+
             }
         }
         
@@ -109,8 +116,16 @@ function Invoke-CommandShortener {
     
     # Process each line of the script block
     for ($i = 0; $i -lt $scriptBlockText.Count; $i++) {
-        # Replace command names with their aliases
-        $scriptBlockText[$i] = $scriptBlockText[$i] -replace ($list[$i].CommandName, $list[$i].CommandAlias)
+        
+        # Replace command names with their aliases or implied 'Get-' if available
+        switch -Wildcard ($list[$i].CommandName) {
+            { -not [string]::IsNullOrEmpty($list[$i].CommandAlias) } {
+                $scriptBlockText[$i] = $scriptBlockText[$i] -replace $list[$i].CommandName, $list[$i].CommandAlias
+            }
+            { $_ -like "Get-*" } {
+                $scriptBlockText[$i] = $scriptBlockText[$i] -replace $list[$i].CommandName, ($_ -replace "Get-")
+            }
+        }
         
         # Replace parameter names with their shortest aliases
         $list[$i].Parameters.GetEnumerator() | Where-Object {
@@ -134,3 +149,5 @@ function Invoke-CommandShortener {
     # Create and return the modified script block
     return $([scriptblock]::Create($finalScriptBlockText))
 }
+
+Invoke-CommandShortener -InputScriptBlock {Get-ChildItem}
