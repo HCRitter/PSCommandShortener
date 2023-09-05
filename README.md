@@ -3,23 +3,18 @@ Shortens and simplifies a PowerShell script block by replacing command names wit
 
 ### The Invoke-CommandShortener function takes a PowerShell script block as input and performs the following tasks:
     
-    1. Splits the input script block into individual lines, removing empty lines and delimiters.
-    2. Identifies command delimiters in the input script block.
-    3. Parses the input script block into an Abstract Syntax Tree (AST).
-    4. Extract a list of command elements and their associated parameters from the AST.
-    5. Creates a list of command information, including aliases and parameters.
-    6. Replaces command names with their aliases and parameter names with their shortest aliases.
-    7. Returns the modified script block.
+  1. Splits the input script block into individual lines, removing empty lines and delimiters.
+  2. Identifies command delimiters in the input script block.
+  3. Parses the input script block into an Abstract Syntax Tree (AST).
+  4. Extracts a list of command elements and their associated parameters from the AST.
+  5. Creates a list of command information, including aliases and parameters.
+  6. Replaces command names with their aliases and parameter names with their shortest aliases, including an implied 'Get-' test.
+  7. Returns the modified script block.
+
 
 ### Planned improvements:
 
-  1. Checking for implied Get- if there is no alias for a specific command - If a command has a 'get' verb then you could ignore it and the command will work very the same way 
-```powershell
-Get-Childitem -Path "C:\Temp\"
-# is the same like:
-Childitem -Path "C:\Temp\"
-```
-  2. Shortest Unique Parameter Match: I aim to identify the shortest, unique match for a parameter when no alias is defined. This will help ensure that the shortened parameter is unique within the command.
+  1. Shortest Unique Parameter Match: I aim to identify the shortest, unique match for a parameter when no alias is defined. This will help ensure that the shortened parameter is unique within the command.
 ```PowerShell
 Get-Childitem -Path "C:\Temp\"
 # would become:
