@@ -39,7 +39,7 @@
     File Name      : Invoke-CommandShortener.ps1
     Author         : Christian Ritter
     Prerequisite   : PowerShell v3.0
-    version        : 0.1
+    version        : 0.3
 
 .LINK
     Online version: https://github.com/HCRitter/PSCommandShortener
@@ -94,12 +94,28 @@ function Invoke-CommandShortener {
         }
         
         $parameters = [ordered]@{}
-        
-        # Match command parameters with their aliases and select the shortest alias
+        # Match command parameters with their aliases and select the shortest alias or unique match
         foreach ($commandElementListItemParameterItem in $commandElementListItem.Parameters) {
-            switch ((Get-Command $command.Name | Select-Object -ExpandProperty ParameterSets).Parameters) {
-                {($commandElementListItemParameterItem -eq $PSItem.Alias) -or ($commandElementListItemParameterItem -eq $PSItem.Name)} {
-                    $parameters[$PSitem.Name] = $($PSItem.Aliases  | Sort-Object -Property Length | Select-Object -first 1)
+            switch ((Get-Command $command.Name | Select-Object -ExpandProperty ParameterSets).Parameters | Where-Object { ($_.Name -eq $commandElementListItemParameterItem) -or ($_.Aliases.contains($commandElementListItemParameterItem)) }) {
+                {($commandElementListItemParameterItem -eq $PSItem.Aliases) -or ($commandElementListItemParameterItem -eq $PSItem.Name) -and (-not [string]::IsNullOrEmpty($PSItem.Aliases))} {
+                    # If the parameter is an alias, select the shortest alias
+                    $parameters[$PSitem.Name] = $($PSItem.Aliases | Sort-Object -Property Length | Select-Object -first 1)
+                }
+                Default {
+                    # Find the shortest unique parameter match
+                    $ShortestUniqueParameterMatch = ""
+                    # Iterate through each character in the parameter string
+                    foreach ($Char in $commandElementListItemParameterItem.ToCharArray()) {
+                        $ShortestUniqueParameterMatch += $Char
+                        
+                        # Count how many parameters start with the current match
+                        $count = ((Get-Command $command.Name | Select-Object -ExpandProperty ParameterSets).Parameters.Name | Where-Object { $_ -like "$ShortestUniqueParameterMatch*" }).Count
+
+                        if ($count -eq 1) {
+                            break  # Exit the loop when count equals 1 (shortest unique match found)
+                        }
+                    }
+                    $parameters[$PSitem.Name] = $ShortestUniqueParameterMatch
                 }
             }
         }
@@ -116,7 +132,7 @@ function Invoke-CommandShortener {
     
     # Process each line of the script block
     for ($i = 0; $i -lt $scriptBlockText.Count; $i++) {
-        
+
         # Replace command names with their aliases or implied 'Get-' if available
         switch -Wildcard ($list[$i].CommandName) {
             { -not [string]::IsNullOrEmpty($list[$i].CommandAlias) } {
@@ -127,13 +143,13 @@ function Invoke-CommandShortener {
             }
         }
         
-        # Replace parameter names with their shortest aliases
-        $list[$i].Parameters.GetEnumerator() | Where-Object {
-            -not [string]::IsNullOrEmpty($PSItem.Value)
-        } | ForEach-Object {
-            $scriptBlockText[$i] = $scriptBlockText[$i] -replace $PSItem.Key, $PSItem.Value
-        }
         
+        switch ($list[$i].Parameters.GetEnumerator()) {
+            # Replace parameter names with their shortest aliases
+            { -not [string]::IsNullOrEmpty($_.Value) } {
+                $scriptBlockText[$i] = $scriptBlockText[$i] -replace $_.Key, $_.Value
+            }
+        }
         # Append the modified line to the final script block text
         $finalScriptBlockText += $scriptBlockText[$i]
         
@@ -149,5 +165,3 @@ function Invoke-CommandShortener {
     # Create and return the modified script block
     return $([scriptblock]::Create($finalScriptBlockText))
 }
-
-Invoke-CommandShortener -InputScriptBlock {Get-ChildItem}
