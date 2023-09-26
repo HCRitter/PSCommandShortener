@@ -165,3 +165,5 @@ function Invoke-CommandShortener {
     # Create and return the modified script block
     return $([scriptblock]::Create($finalScriptBlockText))
 }
+
+
